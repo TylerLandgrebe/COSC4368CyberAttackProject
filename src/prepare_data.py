@@ -1,5 +1,3 @@
-"""Load, audit, and split the cybersecurity dataset for model training."""
-
 from __future__ import annotations
 
 import argparse
@@ -70,7 +68,6 @@ def _load_csv(path: Path) -> pd.DataFrame:
     if frame.empty:
         raise ValueError(f"Dataset is empty: {path}")
 
-    # Treat whitespace-only strings as missing, but otherwise retain the source values.
     text_columns = frame.select_dtypes(include=["object", "string"]).columns
     for column in text_columns:
         frame[column] = frame[column].map(
@@ -92,8 +89,6 @@ def _stratified_splits(
     if len(class_counts) < 2:
         raise ValueError(f"Target '{target}' has fewer than two classes; classification needs at least two.")
 
-    # Split off the test set, then divide the remaining data into train and validation.
-    # Each stage stratifies on the target so rare labels are represented in every split.
     try:
         train_validation, test = train_test_split(
             frame,

@@ -1,23 +1,40 @@
-"""Leakage-safe feature preprocessing helpers for scikit-learn model pipelines."""
-
 from __future__ import annotations
 
+import numpy as np
+import pandas as pd
 from sklearn.compose import ColumnTransformer, make_column_selector
 from sklearn.impute import SimpleImputer
 from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import OneHotEncoder, StandardScaler
+from sklearn.preprocessing import FunctionTransformer, OneHotEncoder, StandardScaler
+
+
+IDENTIFIERS = ["timestamp", "src_ip", "dst_ip"]
+
+
+def make_model_pipeline(classifier, to_cuda=None, feature_transform=None) -> Pipeline:
+    preprocessor = make_preprocessor()
+    steps = [("preprocess", preprocessor)]
+    if feature_transform is not None:
+        steps.insert(0, ("features", FunctionTransformer(feature_transform)))
+    if to_cuda is not None:
+        preprocessor.sparse_threshold = 0
+        steps.append(("to_cuda", FunctionTransformer(to_cuda, kw_args={"dtype": np.float32})))
+    steps.append(("classifier", classifier))
+    return Pipeline(steps)
+
+
+def traffic_features(features: pd.DataFrame) -> pd.DataFrame:
+    url = features["url"].fillna("")
+    return features.drop(columns=[*IDENTIFIERS, "src_port", "url"]).assign(
+        dst_port=features["dst_port"].fillna(-1).astype(str),
+        url_present=url.ne("").astype(int),
+        url_length=url.str.len(),
+        url_slashes=url.str.count("/"),
+        log_byte_ratio=np.log1p(features["bytes_sent"]) - np.log1p(features["bytes_received"]),
+    )
 
 
 def make_preprocessor() -> ColumnTransformer:
-    """Create a transformer to be fit on X_train only, inside a model Pipeline.
-
-    Numeric columns receive median imputation and standardization. Categorical columns
-    receive most-frequent imputation and one-hot encoding. Rare categories are grouped
-    to keep high-cardinality fields manageable; unseen validation/test categories are
-    ignored. This helper intentionally does not decide whether identifiers such as IPs,
-    URLs, or timestamps should be features; inspect the data summary and evaluate those
-    choices as part of the experiment.
-    """
     numeric = Pipeline(
         steps=[
             ("impute", SimpleImputer(strategy="median")),
@@ -26,7 +43,6 @@ def make_preprocessor() -> ColumnTransformer:
     )
     categorical = Pipeline(
         steps=[
-            # Preserve missingness as its own category (notably, many URLs are absent).
             ("impute", SimpleImputer(strategy="constant", fill_value="__missing__")),
             (
                 "encode",

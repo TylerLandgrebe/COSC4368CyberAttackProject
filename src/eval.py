@@ -160,7 +160,6 @@ def plot_model_comparison(df):
 def measure_inference_latency(model, X, repeats=10):
     times = []
 
-    # Warm-up prediction
     model.predict(X)
 
     for _ in range(repeats):
