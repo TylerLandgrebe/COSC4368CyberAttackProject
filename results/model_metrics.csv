@@ -1,0 +1,2 @@
+model,accuracy,macro_precision,macro_recall,macro_f1,weighted_f1,balanced_accuracy,inference_latency_ms
+Majority Class Baseline,0.960000,0.096000,0.100000,0.097959,0.940408,0.100000,0.000015
