@@ -1,0 +1,11 @@
+actual,benign,brute-force,c2,command-injection,credential-stuffing,ddos,exploit-attempt,port-scan,sql-injection,xss
+benign,1437,3,0,0,0,0,0,0,0,0
+brute-force,15,1,0,0,0,0,0,0,0,0
+c2,2,0,0,0,0,0,0,0,0,0
+command-injection,0,0,0,1,0,0,0,0,1,2
+credential-stuffing,4,0,0,0,0,0,0,0,0,0
+ddos,3,0,0,0,0,1,0,0,0,0
+exploit-attempt,3,0,0,0,0,0,0,0,0,0
+port-scan,12,0,0,0,0,0,0,0,0,0
+sql-injection,9,0,0,0,0,0,0,0,0,1
+xss,3,0,0,2,0,0,0,0,0,0
