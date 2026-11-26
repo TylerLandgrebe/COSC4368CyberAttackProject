@@ -9,17 +9,12 @@ import numpy as np
 import pandas as pd
 from matplotlib.ticker import PercentFormatter
 
+from eval import model_label
+
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 
-MODEL_NAMES = {
-    "most_frequent": "Always benign",
-    "logistic_regression": "Logistic regression",
-    "svm": "RBF SVM",
-    "random_forest": "Random forest",
-    "xgboost": "XGBoost",
-}
 SPLIT_NAMES = {"original": "Original holdout", "chronological": "Later development rows"}
 BLUE, TEAL, GRAY = "#285B93", "#087F75", "#64748B"
 
@@ -36,6 +31,7 @@ def main() -> None:
     for source, name in (
         (multiclass / "test_metrics.csv", "multiclass_test_metrics.csv"),
         (multiclass / "per_class_metrics.csv", "multiclass_per_class_metrics.csv"),
+        (multiclass / "multiclass_recall_heatmap.png", "multiclass_recall_heatmap.png"),
         (multiclass / "confusion_random_forest_without_ids.png", "random_forest_confusion.png"),
         (cascade / "test_metrics.csv", "cascade_test_metrics.csv"),
         (cascade / "validation_metrics.csv", "cascade_validation_metrics.csv"),
@@ -49,7 +45,6 @@ def main() -> None:
     operating_points.to_csv(args.output_dir / "binary_operating_points.csv", index=False)
     multiclass_metrics = pd.read_csv(multiclass / "test_metrics.csv")
     plot_multiclass(multiclass_metrics, args.output_dir)
-    plot_per_class_recall(pd.read_csv(multiclass / "per_class_metrics.csv"), args.output_dir)
     if "xgboost_without_ids" in set(multiclass_metrics["model"]):
         copyfile(multiclass.parent / "xgboost_validation_metrics.csv", args.output_dir / "multiclass_xgboost_validation.csv")
         copyfile(multiclass / "confusion_xgboost_without_ids.png", args.output_dir / "xgboost_confusion.png")
@@ -61,13 +56,6 @@ def main() -> None:
         copyfile(boosting / "validation_metrics.csv", args.output_dir / "boosting_validation_metrics.csv")
         plot_boosting(pd.read_csv(boosting / "test_metrics.csv"), args.output_dir)
     print(f"Outputs: {args.output_dir.resolve()}")
-
-
-def model_label(name: str) -> str:
-    if name == "most_frequent":
-        return MODEL_NAMES[name]
-    model, identifiers, _ = name.rsplit("_", 2)
-    return f"{MODEL_NAMES[model]} · {identifiers} IDs"
 
 
 def plot_multiclass(metrics: pd.DataFrame, output: Path) -> None:
@@ -128,25 +116,6 @@ def plot_attribution(metrics: pd.DataFrame, output: Path) -> None:
     axes[0].set_ylabel("Share of all attacks typed correctly")
     fig.suptitle("End-to-end attack attribution")
     fig.savefig(output / "cascade_attribution.png", dpi=160)
-    plt.close(fig)
-
-
-def plot_per_class_recall(metrics: pd.DataFrame, output: Path) -> None:
-    recall = metrics.pivot(index="attack_type", columns="model", values="recall")
-    recall = recall.reindex(columns=metrics["model"].unique())
-    support = metrics.drop_duplicates("attack_type").set_index("attack_type")["support"]
-    fig, ax = plt.subplots(figsize=(11.5, 6.6), layout="constrained")
-    image = ax.imshow(recall, cmap="Blues", vmin=0, vmax=1, aspect="auto")
-    ax.set_xticks(range(len(recall.columns)), [model_label(name) for name in recall.columns],
-                  rotation=32, ha="right")
-    ax.set_yticks(range(len(recall)), [f"{label} (n={support[label]})" for label in recall.index])
-    for row, values in enumerate(recall.to_numpy()):
-        for column, value in enumerate(values):
-            ax.text(column, row, f"{value:.0%}", ha="center", va="center",
-                    color="white" if value > 0.5 else "black", fontsize=8)
-    fig.colorbar(image, ax=ax, label="Recall", format=PercentFormatter(1))
-    ax.set_title("Held-out test recall by attack type")
-    fig.savefig(output / "multiclass_recall_heatmap.png", dpi=160)
     plt.close(fig)
 
 
