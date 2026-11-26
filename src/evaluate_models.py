@@ -53,15 +53,24 @@ def save_matrix(matrix, support, classes, name, output_dir):
     )
 
 
+def verify_test_files(directory: Path, fingerprints: dict[str, str]) -> None:
+    for name in ("X_test.csv", "y_test.csv"):
+        expected = fingerprints.get(name)
+        if expected is None:
+            raise ValueError(f"Run is missing the fingerprint for {name}. Regenerate test predictions.")
+        actual = hashlib.sha256((directory / name).read_bytes()).hexdigest()
+        if actual != expected:
+            raise ValueError(f"{name} differs from the split used to generate predictions.")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Evaluate a training run on the held-out test split.")
-    parser.add_argument("run_dir", type=Path, help="Folder containing run.json and test_predictions.csv.")
+    parser.add_argument("run_dir", nargs="?", type=Path, default=Path("data/processed/training_cuda_with_test"),
+                        help="Folder containing run.json and test_predictions.csv.")
     run_dir = parser.parse_args().run_dir
     settings = json.loads((run_dir / "run.json").read_text(encoding="utf-8"))
-    feature_file = run_dir.parent / "X_test.csv"
-    if hashlib.sha256(feature_file.read_bytes()).hexdigest() != settings["input_sha256"]["X_test.csv"]:
-        raise ValueError("Test features differ from the split used to generate predictions.")
-    features = pd.read_csv(feature_file)
+    verify_test_files(run_dir.parent, settings["input_sha256"])
+    features = pd.read_csv(run_dir.parent / "X_test.csv")
     truth = pd.read_csv(run_dir.parent / "y_test.csv")[settings["target"]]
     predictions = pd.read_csv(run_dir / "test_predictions.csv")
     np.testing.assert_array_equal(predictions["row_index"], np.arange(len(features)))
@@ -92,6 +101,7 @@ def main() -> None:
             "backend": info["backend"],
             "validation_macro_f1": info["validation"]["macro_f1"],
             "accuracy": true_positives.sum() / len(truth),
+            "balanced_accuracy": recall.mean(),
             "benign_false_alarm_rate": 1 - recall[benign],
             "benign_flagged_as_attack": support[benign] - true_positives[benign],
             "attacks_detected": len(truth) - support[benign] - (matrix[:, benign].sum() - true_positives[benign]),

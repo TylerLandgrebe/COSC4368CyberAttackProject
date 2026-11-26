@@ -59,27 +59,36 @@ def main() -> None:
 
 
 def fit_detectors(train, validation, factories, to_cuda):
+    candidates = (
+        (name, classifier, transform, IDENTIFIERS if transform is None else [])
+        for name, classifier, transform in detector_candidates(factories)
+    )
+    models = {}
+    validation_results = []
+    for name, model, operating_points in fit_binary_candidates(train, validation, candidates, to_cuda):
+        models[name] = model
+        validation_results.extend(operating_points)
+    return models, validation_results
+
+
+def fit_binary_candidates(train, validation, candidates, to_cuda):
     train_features, train_types = train
     validation_features, validation_types = validation
     train_labels = train_types.ne("benign").to_numpy(dtype=np.int32)
     validation_labels = validation_types.ne("benign").to_numpy()
     weights = compute_sample_weight("balanced", train_labels)
 
-    models = {}
-    validation_results = []
-    for name, classifier, feature_transform in detector_candidates(factories):
+    for name, classifier, feature_transform, excluded in candidates:
         model = make_model_pipeline(classifier, to_cuda, feature_transform)
-        fit_features = train_features if feature_transform else train_features.drop(columns=IDENTIFIERS)
-        model.fit(fit_features, train_labels, classifier__sample_weight=weights)
-        models[name] = model
+        model.fit(train_features.drop(columns=excluded), train_labels, classifier__sample_weight=weights)
         scores = attack_scores(model, validation_features)
+        operating_points = []
         for budget in FALSE_ALARM_BUDGETS:
             threshold = select_threshold(validation_labels, scores, budget)
             result = detection_metrics(validation_labels, scores, threshold)
             assert result["false_alarm_rate"] <= budget
-            validation_results.append({"model": name, "budget": budget, **result})
-
-    return models, validation_results
+            operating_points.append({"model": name, "budget": budget, **result})
+        yield name, model, operating_points
 
 
 def select_detectors(validation_results: list[dict]) -> list[dict]:
@@ -90,6 +99,8 @@ def select_detectors(validation_results: list[dict]) -> list[dict]:
         )
         for budget in FALSE_ALARM_BUDGETS
     ]
+
+
 def load_split(directory: Path, name: str) -> tuple[pd.DataFrame, pd.Series]:
     features = load_features(directory / f"X_{name}.csv")
     attack_types = pd.read_csv(directory / f"y_{name}.csv")["attack_type"]

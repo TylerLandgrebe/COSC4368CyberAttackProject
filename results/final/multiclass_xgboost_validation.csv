@@ -1,0 +1,4 @@
+max_depth,validation_macro_f1,selected
+4,0.24780531286189483,False
+6,0.35540091716422884,True
+8,0.3441482999110118,False
